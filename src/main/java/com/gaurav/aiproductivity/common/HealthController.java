@@ -1,4 +1,4 @@
-package com.gaurav.aiproductivity.controller;
+package com.gaurav.aiproductivity.common;
 
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RestController;

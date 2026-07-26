@@ -1,6 +1,5 @@
-package com.gaurav.aiproductivity.repository;
+package com.gaurav.aiproductivity.user;
 
-import com.gaurav.aiproductivity.entity.User;
 import org.springframework.data.jpa.repository.JpaRepository;
 
 public interface UserRepository extends JpaRepository<User, Long> {

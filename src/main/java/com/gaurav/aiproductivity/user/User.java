@@ -1,4 +1,4 @@
-package com.gaurav.aiproductivity.entity;
+package com.gaurav.aiproductivity.user;
 
 import jakarta.persistence.*;
 

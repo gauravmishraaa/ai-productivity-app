@@ -1,7 +1,5 @@
-package com.gaurav.aiproductivity.service;
+package com.gaurav.aiproductivity.user;
 
-import com.gaurav.aiproductivity.entity.User;
-import com.gaurav.aiproductivity.repository.UserRepository;
 import org.springframework.stereotype.Service;
 
 import java.util.List;

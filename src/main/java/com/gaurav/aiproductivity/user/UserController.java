@@ -1,7 +1,5 @@
-package com.gaurav.aiproductivity.controller;
+package com.gaurav.aiproductivity.user;
 
-import com.gaurav.aiproductivity.entity.User;
-import com.gaurav.aiproductivity.service.UserService;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
