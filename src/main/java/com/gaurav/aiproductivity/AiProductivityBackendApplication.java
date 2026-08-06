@@ -7,7 +7,7 @@ import org.springframework.boot.autoconfigure.SpringBootApplication;
 public class AiProductivityBackendApplication {
 
 	public static void main(String[] args) {
-		SpringApplication.run(AiProductivityBackendApplication.class, args);
+		SpringApplication.run(AiProductivityBackendApplication.class, args)
 	}
 
 }
