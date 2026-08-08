@@ -1,4 +1,6 @@
 package com.gaurav.aiproductivity.dto.chat;
 
-public class ChatResponse {
+public record ChatResponse(
+        String response
+) {
 }
