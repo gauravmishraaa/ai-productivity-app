@@ -12,6 +12,7 @@ import java.util.stream.Collectors;
 @RestControllerAdvice
 public class GlobalExceptionHandler {
 
+    // Handles validation errors
     @ExceptionHandler(MethodArgumentNotValidException.class)
     public ResponseEntity<ApiResponse<Void>> handleValidation(
             MethodArgumentNotValidException exception
@@ -30,6 +31,18 @@ public class GlobalExceptionHandler {
                 .body(ApiResponse.error(message));
     }
 
+    // Handles conversation not found
+    @ExceptionHandler(ConversationNotFoundException.class)
+    public ResponseEntity<ApiResponse<Void>> handleConversationNotFound(
+            ConversationNotFoundException exception
+    ) {
+
+        return ResponseEntity
+                .status(HttpStatus.NOT_FOUND)
+                .body(ApiResponse.error(exception.getMessage()));
+    }
+
+    // Handles all unexpected exceptions
     @ExceptionHandler(Exception.class)
     public ResponseEntity<ApiResponse<Void>> handleException(
             Exception exception
@@ -37,6 +50,8 @@ public class GlobalExceptionHandler {
 
         return ResponseEntity
                 .status(HttpStatus.INTERNAL_SERVER_ERROR)
-                .body(ApiResponse.error(exception.getMessage()));
+                .body(ApiResponse.error(
+                        "An unexpected error occurred"
+                ));
     }
 }

@@ -3,6 +3,7 @@ package com.gaurav.aiproductivity.service;
 import com.gaurav.aiproductivity.dto.chat.ChatResponse;
 import lombok.RequiredArgsConstructor;
 import org.springframework.ai.chat.client.ChatClient;
+import org.springframework.ai.chat.memory.ChatMemory;
 import org.springframework.stereotype.Service;
 import reactor.core.publisher.Flux;
 
@@ -13,11 +14,20 @@ public class ChatServiceImpl implements ChatService {
     private final ChatClient chatClient;
 
     @Override
-    public ChatResponse chat(String message) {
+    public ChatResponse chat(
+            Long conversationId,
+            String message
+    ) {
 
         String response = chatClient
                 .prompt()
                 .user(message)
+                .advisors(advisorSpec ->
+                        advisorSpec.param(
+                                ChatMemory.CONVERSATION_ID,
+                                conversationId.toString()
+                        )
+                )
                 .call()
                 .content();
 
@@ -25,11 +35,20 @@ public class ChatServiceImpl implements ChatService {
     }
 
     @Override
-    public Flux<String> streamChat(String message) {
+    public Flux<String> streamChat(
+            Long conversationId,
+            String message
+    ) {
 
         return chatClient
                 .prompt()
                 .user(message)
+                .advisors(advisorSpec ->
+                        advisorSpec.param(
+                                ChatMemory.CONVERSATION_ID,
+                                conversationId.toString()
+                        )
+                )
                 .stream()
                 .content();
     }

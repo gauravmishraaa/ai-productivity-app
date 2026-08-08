@@ -23,7 +23,10 @@ public class ChatController {
             @Valid @RequestBody ChatRequest request
     ) {
 
-        ChatResponse response = chatService.chat(request.message());
+        ChatResponse response = chatService.chat(
+                request.conversationId(),
+                request.message()
+        );
 
         return ResponseEntity.ok(
                 ApiResponse.success(
@@ -41,6 +44,9 @@ public class ChatController {
             @Valid @RequestBody ChatRequest request
     ) {
 
-        return chatService.streamChat(request.message());
+        return chatService.streamChat(
+                request.conversationId(),
+                request.message()
+        );
     }
 }
