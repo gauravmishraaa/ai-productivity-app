@@ -1,17 +1,22 @@
 package com.gaurav.aiproductivity.service;
 
+import com.gaurav.aiproductivity.dto.chat.ChatMessageResponse;
 import com.gaurav.aiproductivity.dto.chat.ChatResponse;
 import lombok.RequiredArgsConstructor;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.chat.memory.ChatMemory;
+import org.springframework.ai.chat.messages.Message;
 import org.springframework.stereotype.Service;
 import reactor.core.publisher.Flux;
+
+import java.util.List;
 
 @Service
 @RequiredArgsConstructor
 public class ChatServiceImpl implements ChatService {
 
     private final ChatClient chatClient;
+    private final ChatMemory chatMemory;
 
     @Override
     public ChatResponse chat(
@@ -51,5 +56,28 @@ public class ChatServiceImpl implements ChatService {
                 )
                 .stream()
                 .content();
+    }
+
+    @Override
+    public List<ChatMessageResponse> getHistory(
+            Long conversationId
+    ) {
+
+        List<Message> messages = chatMemory.get(
+                conversationId.toString()
+        );
+
+        return messages.stream()
+                .map(message -> {
+
+                    String role = message.getMessageType()
+                            .name();
+
+                    return new ChatMessageResponse(
+                            role,
+                            message.getText()
+                    );
+                })
+                .toList();
     }
 }
