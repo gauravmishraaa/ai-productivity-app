@@ -21,4 +21,8 @@ public interface ChatService {
     List<ChatMessageResponse> getHistory(
             Long conversationId
     );
+
+    void deleteHistory(
+            Long conversationId
+    );
 }

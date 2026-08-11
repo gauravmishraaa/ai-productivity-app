@@ -18,8 +18,8 @@ import java.util.List;
 public class ConversationServiceImpl implements ConversationService {
 
     private final ConversationRepository conversationRepository;
+    private final ChatService chatService;
 
-    // CREATE
     @Override
     public ConversationResponse create(
             CreateConversationRequest request
@@ -29,12 +29,12 @@ public class ConversationServiceImpl implements ConversationService {
                 .title(request.title())
                 .build();
 
-        Conversation saved = conversationRepository.save(conversation);
+        Conversation saved =
+                conversationRepository.save(conversation);
 
         return toResponse(saved);
     }
 
-    // GET ALL
     @Override
     @Transactional(readOnly = true)
     public List<ConversationResponse> getAll() {
@@ -45,51 +45,52 @@ public class ConversationServiceImpl implements ConversationService {
                 .toList();
     }
 
-    // GET BY ID
     @Override
     @Transactional(readOnly = true)
     public ConversationResponse getById(Long id) {
 
-        Conversation conversation = conversationRepository.findById(id)
-                .orElseThrow(() ->
-                        new ConversationNotFoundException(id)
-                );
+        Conversation conversation =
+                conversationRepository.findById(id)
+                        .orElseThrow(() ->
+                                new ConversationNotFoundException(id)
+                        );
 
         return toResponse(conversation);
     }
 
-    // UPDATE
     @Override
     public ConversationResponse update(
             Long id,
             UpdateConversationRequest request
     ) {
 
-        Conversation conversation = conversationRepository.findById(id)
-                .orElseThrow(() ->
-                        new ConversationNotFoundException(id)
-                );
+        Conversation conversation =
+                conversationRepository.findById(id)
+                        .orElseThrow(() ->
+                                new ConversationNotFoundException(id)
+                        );
 
         conversation.setTitle(request.title());
 
-        Conversation updated = conversationRepository.save(conversation);
+        Conversation updated =
+                conversationRepository.save(conversation);
 
         return toResponse(updated);
     }
 
-    // DELETE
     @Override
     public void delete(Long id) {
 
-        Conversation conversation = conversationRepository.findById(id)
+        conversationRepository.findById(id)
                 .orElseThrow(() ->
                         new ConversationNotFoundException(id)
                 );
 
-        conversationRepository.delete(conversation);
+        chatService.deleteHistory(id);
+
+        conversationRepository.deleteById(id);
     }
 
-    // ENTITY → RESPONSE DTO
     private ConversationResponse toResponse(
             Conversation conversation
     ) {
