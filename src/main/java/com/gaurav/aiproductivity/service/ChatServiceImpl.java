@@ -5,12 +5,15 @@ import com.gaurav.aiproductivity.dto.chat.ChatResponse;
 import com.gaurav.aiproductivity.entity.Conversation;
 import com.gaurav.aiproductivity.exception.ConversationNotFoundException;
 import com.gaurav.aiproductivity.repository.ConversationRepository;
+import com.gaurav.aiproductivity.service.streaming.StreamManager;
+import com.gaurav.aiproductivity.service.streaming.StreamSession;
 import lombok.RequiredArgsConstructor;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.chat.memory.ChatMemory;
 import org.springframework.ai.chat.messages.Message;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import reactor.core.Disposable;
 import reactor.core.publisher.Flux;
 
 import java.util.List;
@@ -22,6 +25,7 @@ public class ChatServiceImpl implements ChatService {
     private final ChatClient chatClient;
     private final ChatMemory chatMemory;
     private final ConversationRepository conversationRepository;
+    private final StreamManager streamManager;
 
     @Override
     public ChatResponse chat(
@@ -54,7 +58,15 @@ public class ChatServiceImpl implements ChatService {
 
         validateConversation(conversationId);
 
-        return chatClient
+        StreamSession session =
+                streamManager.createSession(
+                        conversationId,
+                        message
+                );
+
+        String streamId = session.getStreamId();
+
+        Flux<String> aiStream = chatClient
                 .prompt()
                 .user(message)
                 .advisors(advisorSpec ->
@@ -65,6 +77,49 @@ public class ChatServiceImpl implements ChatService {
                 )
                 .stream()
                 .content();
+
+        return Flux.create(sink -> {
+
+            Disposable subscription = aiStream
+                    .doOnNext(chunk -> {
+
+                        streamManager.appendResponse(
+                                streamId,
+                                chunk
+                        );
+
+                        sink.next(chunk);
+                    })
+                    .doOnComplete(() -> {
+
+                        streamManager.complete(
+                                streamId
+                        );
+
+                        sink.complete();
+                    })
+                    .doOnError(error -> {
+
+                        streamManager.fail(
+                                streamId
+                        );
+
+                        sink.error(error);
+                    })
+                    .subscribe();
+
+            streamManager.registerSubscription(
+                    streamId,
+                    subscription
+            );
+
+            sink.onCancel(() -> {
+
+                streamManager.cancel(
+                        streamId
+                );
+            });
+        });
     }
 
     @Override
@@ -76,7 +131,9 @@ public class ChatServiceImpl implements ChatService {
         validateConversation(conversationId);
 
         List<Message> messages =
-                chatMemory.get(conversationId.toString());
+                chatMemory.get(
+                        conversationId.toString()
+                );
 
         return messages.stream()
                 .map(message ->
@@ -89,7 +146,9 @@ public class ChatServiceImpl implements ChatService {
     }
 
     @Override
-    public void deleteHistory(Long conversationId) {
+    public void deleteHistory(
+            Long conversationId
+    ) {
 
         validateConversation(conversationId);
 
@@ -98,13 +157,17 @@ public class ChatServiceImpl implements ChatService {
         );
     }
 
-    private void validateConversation(Long conversationId) {
+    private void validateConversation(
+            Long conversationId
+    ) {
 
-        conversationRepository.findById(conversationId)
-                .orElseThrow(() ->
-                        new ConversationNotFoundException(
-                                conversationId
-                        )
-                );
+        Conversation conversation =
+                conversationRepository
+                        .findById(conversationId)
+                        .orElseThrow(() ->
+                                new ConversationNotFoundException(
+                                        conversationId
+                                )
+                        );
     }
 }
