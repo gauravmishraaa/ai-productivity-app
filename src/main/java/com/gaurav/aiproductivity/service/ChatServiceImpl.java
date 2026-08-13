@@ -2,11 +2,13 @@ package com.gaurav.aiproductivity.service;
 
 import com.gaurav.aiproductivity.dto.chat.ChatMessageResponse;
 import com.gaurav.aiproductivity.dto.chat.ChatResponse;
-import com.gaurav.aiproductivity.entity.Conversation;
+import com.gaurav.aiproductivity.dto.chat.ChatStreamEvent;
+import com.gaurav.aiproductivity.dto.chat.StreamControlResponse;
 import com.gaurav.aiproductivity.exception.ConversationNotFoundException;
 import com.gaurav.aiproductivity.repository.ConversationRepository;
 import com.gaurav.aiproductivity.service.streaming.StreamManager;
 import com.gaurav.aiproductivity.service.streaming.StreamSession;
+import com.gaurav.aiproductivity.service.streaming.StreamState;
 import lombok.RequiredArgsConstructor;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.chat.memory.ChatMemory;
@@ -26,6 +28,10 @@ public class ChatServiceImpl implements ChatService {
     private final ChatMemory chatMemory;
     private final ConversationRepository conversationRepository;
     private final StreamManager streamManager;
+
+    // =========================================================
+    // NORMAL CHAT
+    // =========================================================
 
     @Override
     public ChatResponse chat(
@@ -50,8 +56,12 @@ public class ChatServiceImpl implements ChatService {
         return new ChatResponse(response);
     }
 
+    // =========================================================
+    // STREAMING CHAT
+    // =========================================================
+
     @Override
-    public Flux<String> streamChat(
+    public Flux<ChatStreamEvent> streamChat(
             Long conversationId,
             String message
     ) {
@@ -80,6 +90,15 @@ public class ChatServiceImpl implements ChatService {
 
         return Flux.create(sink -> {
 
+            // Tell frontend the stream ID
+            sink.next(
+                    new ChatStreamEvent(
+                            "STREAM_STARTED",
+                            streamId,
+                            null
+                    )
+            );
+
             Disposable subscription = aiStream
                     .doOnNext(chunk -> {
 
@@ -88,12 +107,26 @@ public class ChatServiceImpl implements ChatService {
                                 chunk
                         );
 
-                        sink.next(chunk);
+                        sink.next(
+                                new ChatStreamEvent(
+                                        "CHUNK",
+                                        streamId,
+                                        chunk
+                                )
+                        );
                     })
                     .doOnComplete(() -> {
 
                         streamManager.complete(
                                 streamId
+                        );
+
+                        sink.next(
+                                new ChatStreamEvent(
+                                        "COMPLETED",
+                                        streamId,
+                                        null
+                                )
                         );
 
                         sink.complete();
@@ -102,6 +135,14 @@ public class ChatServiceImpl implements ChatService {
 
                         streamManager.fail(
                                 streamId
+                        );
+
+                        sink.next(
+                                new ChatStreamEvent(
+                                        "FAILED",
+                                        streamId,
+                                        error.getMessage()
+                                )
                         );
 
                         sink.error(error);
@@ -121,6 +162,49 @@ public class ChatServiceImpl implements ChatService {
             });
         });
     }
+
+    // =========================================================
+    // PAUSE STREAM
+    // =========================================================
+
+    @Override
+    public StreamControlResponse pauseStream(
+            String streamId
+    ) {
+
+        StreamSession session =
+                streamManager.getSession(streamId);
+
+        if (session == null) {
+
+            throw new IllegalArgumentException(
+                    "Stream not found: " + streamId
+            );
+        }
+
+        if (session.getState() != StreamState.ACTIVE) {
+
+            throw new IllegalStateException(
+                    "Stream is not active. Current state: "
+                            + session.getState()
+            );
+        }
+
+        streamManager.pause(streamId);
+
+        return new StreamControlResponse(
+                streamId,
+                streamManager
+                        .getState(streamId)
+                        .name(),
+                streamManager
+                        .getPartialResponse(streamId)
+        );
+    }
+
+    // =========================================================
+    // CHAT HISTORY
+    // =========================================================
 
     @Override
     @Transactional(readOnly = true)
@@ -145,6 +229,10 @@ public class ChatServiceImpl implements ChatService {
                 .toList();
     }
 
+    // =========================================================
+    // DELETE CHAT HISTORY
+    // =========================================================
+
     @Override
     public void deleteHistory(
             Long conversationId
@@ -157,17 +245,20 @@ public class ChatServiceImpl implements ChatService {
         );
     }
 
+    // =========================================================
+    // VALIDATE CONVERSATION
+    // =========================================================
+
     private void validateConversation(
             Long conversationId
     ) {
 
-        Conversation conversation =
-                conversationRepository
-                        .findById(conversationId)
-                        .orElseThrow(() ->
-                                new ConversationNotFoundException(
-                                        conversationId
-                                )
-                        );
+        conversationRepository
+                .findById(conversationId)
+                .orElseThrow(() ->
+                        new ConversationNotFoundException(
+                                conversationId
+                        )
+                );
     }
 }

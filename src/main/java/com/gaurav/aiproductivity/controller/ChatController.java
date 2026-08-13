@@ -3,6 +3,8 @@ package com.gaurav.aiproductivity.controller;
 import com.gaurav.aiproductivity.dto.chat.ChatMessageResponse;
 import com.gaurav.aiproductivity.dto.chat.ChatRequest;
 import com.gaurav.aiproductivity.dto.chat.ChatResponse;
+import com.gaurav.aiproductivity.dto.chat.ChatStreamEvent;
+import com.gaurav.aiproductivity.dto.chat.StreamControlResponse;
 import com.gaurav.aiproductivity.dto.common.ApiResponse;
 import com.gaurav.aiproductivity.service.ChatService;
 import jakarta.validation.Valid;
@@ -21,16 +23,20 @@ public class ChatController {
 
     private final ChatService chatService;
 
+    // =========================================================
     // NORMAL CHAT
+    // =========================================================
+
     @PostMapping
     public ResponseEntity<ApiResponse<ChatResponse>> chat(
             @Valid @RequestBody ChatRequest request
     ) {
 
-        ChatResponse response = chatService.chat(
-                request.conversationId(),
-                request.message()
-        );
+        ChatResponse response =
+                chatService.chat(
+                        request.conversationId(),
+                        request.message()
+                );
 
         return ResponseEntity.ok(
                 ApiResponse.success(
@@ -40,12 +46,15 @@ public class ChatController {
         );
     }
 
+    // =========================================================
     // STREAMING CHAT
+    // =========================================================
+
     @PostMapping(
             value = "/stream",
             produces = MediaType.TEXT_EVENT_STREAM_VALUE
     )
-    public Flux<String> streamChat(
+    public Flux<ChatStreamEvent> streamChat(
             @Valid @RequestBody ChatRequest request
     ) {
 
@@ -55,7 +64,30 @@ public class ChatController {
         );
     }
 
+    // =========================================================
+    // PAUSE STREAM
+    // =========================================================
+
+    @PostMapping("/stream/{streamId}/pause")
+    public ResponseEntity<ApiResponse<StreamControlResponse>> pauseStream(
+            @PathVariable String streamId
+    ) {
+
+        StreamControlResponse response =
+                chatService.pauseStream(streamId);
+
+        return ResponseEntity.ok(
+                ApiResponse.success(
+                        "Stream paused successfully",
+                        response
+                )
+        );
+    }
+
+    // =========================================================
     // CHAT HISTORY
+    // =========================================================
+
     @GetMapping("/history/{conversationId}")
     public ResponseEntity<ApiResponse<List<ChatMessageResponse>>> getHistory(
             @PathVariable Long conversationId
