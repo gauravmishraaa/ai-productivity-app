@@ -30,5 +30,5 @@ public interface ChatService {
 
     StreamControlResponse pauseStream(
             String streamId
-    );
+    )
 }
