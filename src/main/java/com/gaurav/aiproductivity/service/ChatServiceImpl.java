@@ -25,9 +25,13 @@ import java.util.List;
 public class ChatServiceImpl implements ChatService {
 
     private final ChatClient chatClient;
+
     private final ChatMemory chatMemory;
+
     private final ConversationRepository conversationRepository;
+
     private final StreamManager streamManager;
+
 
     // =========================================================
     // NORMAL CHAT
@@ -56,8 +60,9 @@ public class ChatServiceImpl implements ChatService {
         return new ChatResponse(response);
     }
 
+
     // =========================================================
-    // STREAMING CHAT
+    // START STREAM
     // =========================================================
 
     @Override
@@ -68,14 +73,18 @@ public class ChatServiceImpl implements ChatService {
 
         validateConversation(conversationId);
 
+        // Create a new stream session
         StreamSession session =
                 streamManager.createSession(
                         conversationId,
                         message
                 );
 
-        String streamId = session.getStreamId();
+        String streamId =
+                session.getStreamId();
 
+
+        // Create AI streaming response
         Flux<String> aiStream = chatClient
                 .prompt()
                 .user(message)
@@ -88,80 +97,42 @@ public class ChatServiceImpl implements ChatService {
                 .stream()
                 .content();
 
-        return Flux.create(sink -> {
 
-            // Tell frontend the stream ID
-            sink.next(
-                    new ChatStreamEvent(
-                            "STREAM_STARTED",
-                            streamId,
-                            null
-                    )
-            );
+        /*
+         * IMPORTANT:
+         *
+         * First send STREAM_STARTED event.
+         *
+         * This gives frontend the streamId.
+         *
+         * Then start the actual AI stream.
+         */
 
-            Disposable subscription = aiStream
-                    .doOnNext(chunk -> {
+        return Flux.concat(
 
-                        streamManager.appendResponse(
+                // ---------------------------------------------
+                // STREAM STARTED
+                // ---------------------------------------------
+
+                Flux.just(
+                        new ChatStreamEvent(
+                                "STREAM_STARTED",
                                 streamId,
-                                chunk
-                        );
+                                null
+                        )
+                ),
 
-                        sink.next(
-                                new ChatStreamEvent(
-                                        "CHUNK",
-                                        streamId,
-                                        chunk
-                                )
-                        );
-                    })
-                    .doOnComplete(() -> {
+                // ---------------------------------------------
+                // ACTUAL AI STREAM
+                // ---------------------------------------------
 
-                        streamManager.complete(
-                                streamId
-                        );
-
-                        sink.next(
-                                new ChatStreamEvent(
-                                        "COMPLETED",
-                                        streamId,
-                                        null
-                                )
-                        );
-
-                        sink.complete();
-                    })
-                    .doOnError(error -> {
-
-                        streamManager.fail(
-                                streamId
-                        );
-
-                        sink.next(
-                                new ChatStreamEvent(
-                                        "FAILED",
-                                        streamId,
-                                        error.getMessage()
-                                )
-                        );
-
-                        sink.error(error);
-                    })
-                    .subscribe();
-
-            streamManager.registerSubscription(
-                    streamId,
-                    subscription
-            );
-
-            sink.onCancel(() -> {
-
-                streamManager.cancel(
-                        streamId
-                );
-            });
-        });
+                createControlledStream(
+                        session,
+                        aiStream
+                )
+        );
     }
+
 
     // =========================================================
     // PAUSE STREAM
@@ -182,6 +153,7 @@ public class ChatServiceImpl implements ChatService {
             );
         }
 
+
         if (session.getState() != StreamState.ACTIVE) {
 
             throw new IllegalStateException(
@@ -190,17 +162,263 @@ public class ChatServiceImpl implements ChatService {
             );
         }
 
+
+        // Cancel current reactive subscription
         streamManager.pause(streamId);
+
 
         return new StreamControlResponse(
                 streamId,
+
                 streamManager
                         .getState(streamId)
                         .name(),
+
                 streamManager
                         .getPartialResponse(streamId)
         );
     }
+
+
+    // =========================================================
+    // RESUME STREAM
+    // =========================================================
+
+    @Override
+    public Flux<ChatStreamEvent> resumeStream(
+            String streamId
+    ) {
+
+        StreamSession session =
+                streamManager.getSession(streamId);
+
+
+        if (session == null) {
+
+            throw new IllegalArgumentException(
+                    "Stream not found: " + streamId
+            );
+        }
+
+
+        if (session.getState() != StreamState.PAUSED) {
+
+            throw new IllegalStateException(
+                    "Stream cannot be resumed. Current state: "
+                            + session.getState()
+            );
+        }
+
+
+        Long conversationId =
+                session.getConversationId();
+
+
+        // Make sure conversation still exists
+        validateConversation(conversationId);
+
+
+        String partialResponse =
+                session.getPartialResponse();
+
+
+        /*
+         * Build continuation prompt.
+         *
+         * We are NOT creating a new conversation.
+         *
+         * Same conversationId will be used.
+         */
+
+        String continuationPrompt = """
+                Continue the answer from exactly where it stopped.
+
+                Original user request:
+                %s
+
+                Already generated response:
+                %s
+
+                Instructions:
+                - Continue naturally from the existing response.
+                - Do not repeat the already generated text.
+                - Do not start the answer again.
+                - Return only the continuation.
+                """.formatted(
+                session.getUserMessage(),
+                partialResponse
+        );
+
+
+        // Change state from PAUSED → ACTIVE
+        streamManager.resume(streamId);
+
+
+        // Start a NEW LLM inference
+        Flux<String> aiStream = chatClient
+                .prompt()
+                .user(continuationPrompt)
+                .advisors(advisorSpec ->
+                        advisorSpec.param(
+                                ChatMemory.CONVERSATION_ID,
+                                conversationId.toString()
+                        )
+                )
+                .stream()
+                .content();
+
+
+        /*
+         * Resume event first.
+         *
+         * Frontend already knows streamId,
+         * but sending RESUMED makes UI state handling easier.
+         */
+
+        return Flux.concat(
+
+                Flux.just(
+                        new ChatStreamEvent(
+                                "RESUMED",
+                                streamId,
+                                null
+                        )
+                ),
+
+                createControlledStream(
+                        session,
+                        aiStream
+                )
+        );
+    }
+
+
+    // =========================================================
+    // CONTROLLED STREAM
+    // =========================================================
+
+    private Flux<ChatStreamEvent> createControlledStream(
+            StreamSession session,
+            Flux<String> aiStream
+    ) {
+
+        String streamId =
+                session.getStreamId();
+
+
+        return Flux.create(sink -> {
+
+            /*
+             * Subscribe to Ollama/Spring AI stream.
+             */
+
+            Disposable subscription = aiStream
+
+                    // -----------------------------------------
+                    // EACH AI CHUNK
+                    // -----------------------------------------
+
+                    .doOnNext(chunk -> {
+
+                        // Save partial response
+                        streamManager.appendResponse(
+                                streamId,
+                                chunk
+                        );
+
+
+                        // Send chunk to frontend
+                        sink.next(
+                                new ChatStreamEvent(
+                                        "CHUNK",
+                                        streamId,
+                                        chunk
+                                )
+                        );
+                    })
+
+
+                    // -----------------------------------------
+                    // AI GENERATION COMPLETED
+                    // -----------------------------------------
+
+                    .doOnComplete(() -> {
+
+                        streamManager.complete(
+                                streamId
+                        );
+
+
+                        sink.next(
+                                new ChatStreamEvent(
+                                        "COMPLETED",
+                                        streamId,
+                                        null
+                                )
+                        );
+
+
+                        sink.complete();
+                    })
+
+
+                    // -----------------------------------------
+                    // AI GENERATION FAILED
+                    // -----------------------------------------
+
+                    .doOnError(error -> {
+
+                        streamManager.fail(
+                                streamId
+                        );
+
+
+                        sink.next(
+                                new ChatStreamEvent(
+                                        "FAILED",
+                                        streamId,
+                                        error.getMessage()
+                                )
+                        );
+
+
+                        sink.error(error);
+                    })
+
+
+                    .subscribe();
+
+
+            /*
+             * Store the running subscription.
+             *
+             * Pause/Cancel will use this Disposable.
+             */
+
+            streamManager.registerSubscription(
+                    streamId,
+                    subscription
+            );
+
+
+            /*
+             * If client disconnects,
+             * cancel the stream.
+             */
+
+            sink.onCancel(() -> {
+
+                if (session.getState()
+                        == StreamState.ACTIVE) {
+
+                    streamManager.cancel(
+                            streamId
+                    );
+                }
+            });
+        });
+    }
+
 
     // =========================================================
     // CHAT HISTORY
@@ -214,10 +432,12 @@ public class ChatServiceImpl implements ChatService {
 
         validateConversation(conversationId);
 
+
         List<Message> messages =
                 chatMemory.get(
                         conversationId.toString()
                 );
+
 
         return messages.stream()
                 .map(message ->
@@ -228,6 +448,7 @@ public class ChatServiceImpl implements ChatService {
                 )
                 .toList();
     }
+
 
     // =========================================================
     // DELETE CHAT HISTORY
@@ -240,10 +461,12 @@ public class ChatServiceImpl implements ChatService {
 
         validateConversation(conversationId);
 
+
         chatMemory.clear(
                 conversationId.toString()
         );
     }
+
 
     // =========================================================
     // VALIDATE CONVERSATION

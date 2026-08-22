@@ -23,6 +23,7 @@ public class ChatController {
 
     private final ChatService chatService;
 
+
     // =========================================================
     // NORMAL CHAT
     // =========================================================
@@ -38,6 +39,7 @@ public class ChatController {
                         request.message()
                 );
 
+
         return ResponseEntity.ok(
                 ApiResponse.success(
                         "Chat response generated successfully",
@@ -46,8 +48,9 @@ public class ChatController {
         );
     }
 
+
     // =========================================================
-    // STREAMING CHAT
+    // START STREAM
     // =========================================================
 
     @PostMapping(
@@ -64,6 +67,7 @@ public class ChatController {
         );
     }
 
+
     // =========================================================
     // PAUSE STREAM
     // =========================================================
@@ -74,7 +78,10 @@ public class ChatController {
     ) {
 
         StreamControlResponse response =
-                chatService.pauseStream(streamId);
+                chatService.pauseStream(
+                        streamId
+                );
+
 
         return ResponseEntity.ok(
                 ApiResponse.success(
@@ -83,6 +90,25 @@ public class ChatController {
                 )
         );
     }
+
+
+    // =========================================================
+    // RESUME STREAM
+    // =========================================================
+
+    @PostMapping(
+            value = "/stream/{streamId}/resume",
+            produces = MediaType.TEXT_EVENT_STREAM_VALUE
+    )
+    public Flux<ChatStreamEvent> resumeStream(
+            @PathVariable String streamId
+    ) {
+
+        return chatService.resumeStream(
+                streamId
+        );
+    }
+
 
     // =========================================================
     // CHAT HISTORY
@@ -94,7 +120,10 @@ public class ChatController {
     ) {
 
         List<ChatMessageResponse> history =
-                chatService.getHistory(conversationId);
+                chatService.getHistory(
+                        conversationId
+                );
+
 
         return ResponseEntity.ok(
                 ApiResponse.success(
