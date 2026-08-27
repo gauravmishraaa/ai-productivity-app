@@ -130,6 +130,6 @@ public class ChatController {
                         "Chat history retrieved successfully",
                         history
                 )
-        )
+        );
     }
 }

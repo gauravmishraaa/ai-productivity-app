@@ -35,6 +35,7 @@ public class Conversation {
         updatedAt = now;
     }
 
+
     @PreUpdate
     protected void onUpdate() {
         updatedAt = LocalDateTime.now();
