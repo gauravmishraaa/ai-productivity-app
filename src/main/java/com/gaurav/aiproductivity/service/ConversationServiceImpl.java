@@ -28,10 +28,8 @@ public class ConversationServiceImpl implements ConversationService {
         Conversation conversation = Conversation.builder()
                 .title(request.title())
                 .build();
-
         Conversation saved =
                 conversationRepository.save(conversation);
-
         return toResponse(saved);
     }
 
@@ -48,7 +46,6 @@ public class ConversationServiceImpl implements ConversationService {
     @Override
     @Transactional(readOnly = true)
     public ConversationResponse getById(Long id) {
-
         Conversation conversation =
                 conversationRepository.findById(id)
                         .orElseThrow(() ->
@@ -69,25 +66,20 @@ public class ConversationServiceImpl implements ConversationService {
                         .orElseThrow(() ->
                                 new ConversationNotFoundException(id)
                         );
-
         conversation.setTitle(request.title());
-
         Conversation updated =
                 conversationRepository.save(conversation);
-
         return toResponse(updated);
     }
 
     @Override
     public void delete(Long id) {
-
         conversationRepository.findById(id)
                 .orElseThrow(() ->
                         new ConversationNotFoundException(id)
                 );
 
         chatService.deleteHistory(id);
-
         conversationRepository.deleteById(id);
     }
 

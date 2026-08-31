@@ -26,7 +26,6 @@ public class Conversation {
 
     @Column(nullable = false)
     private LocalDateTime updatedAt;
-
     @PrePersist
     protected void onCreate() {
         LocalDateTime now = LocalDateTime.now();
