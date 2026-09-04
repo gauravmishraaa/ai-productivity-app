@@ -10,4 +10,3 @@ public class AiProductivityBackendApplication {
 		SpringApplication.run(AiProductivityBackendApplication.class, args);
 	}
 
-}
